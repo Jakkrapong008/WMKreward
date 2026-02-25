@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบสารสนเทศผลงานครูและนักเรียน - โรงเรียนวัดแม่กะ</title>
+    <!-- CSS Dependencies -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
+    
+    <style>
+        body { font-family: 'Sarabun', sans-serif; background-color: #fffaf0; }
+        .bg-wmk-red { background-color: #e63946; }
+        .text-wmk-red { color: #e63946; }
+        .bg-wmk-yellow { background-color: #ffb703; }
+        .border-wmk-red { border-color: #e63946; }
+        .btn-primary { background-color: #e63946; color: white; transition: all 0.3s; }
+        .btn-primary:hover { background-color: #c1121f; transform: translateY(-2px); }
+        .card { background: white; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #e63946; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        [data-lucide] { display: inline-block; min-width: 1em; min-height: 1em; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <!-- React and Babel -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo, useRef } = React;
+
+        // --- Configuration ---
+        const CONFIG = {
+            API_URL: "https://script.google.com/macros/s/AKfycbyfGtOupJwaNgsBi4X_dRMpxIhFCWowWMieeqw9FroWZbp5oPGBz5Ck_Hq45hK-fVBy/exec",
+            LOGO: "https://img2.pic.in.th/logob0b7643db577ceee.png",
+            PASSWORD: "wmk"
+        };
+
+        // Helper function for Thai Date format
+        const formatThaiDate = (dateStr) => {
+            if (!dateStr) return "-";
+            const date = new Date(dateStr);
+            if (isNaN(date.getTime())) return dateStr;
+            const months = [
+                "มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน",
+                "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"
+            ];
+            const day = date.getDate();
+            const month = months[date.getMonth()];
+            const year = date.getFullYear() + 543;
+            return `${day} ${month} ${year}`;
+        };
+
+        // Helper function to convert Drive URL to Thumbnail URL
+        const getThumbnailUrl = (url) => {
+            if (!url || typeof url !== 'string') return null;
+            const match = url.match(/id=([^&]+)/);
+            if (match && match[1]) {
+                return `https://drive.google.com/thumbnail?id=${match[1]}&sz=w800`;
+            }
+            return url;
+        };
+
+        // Safe Icon Component
+        const Icon = ({ name, className = "w-5 h-5", ...props }) => {
+            const iconRef = useRef(null);
+            useEffect(() => {
+                if (typeof lucide !== 'undefined' && iconRef.current) {
+                    lucide.createIcons({ targets: [iconRef.current] });
+                }
+            }, [name]);
+            return <span key={name} className="inline-flex items-center justify-center"><i ref={iconRef} data-lucide={name} className={className} {...props}></i></span>;
+        };
+
+        const App = () => {
+            const [view, setView] = useState('dashboard');
+            const [isAuth, setIsAuth] = useState(false);
+            const [showAuthModal, setShowAuthModal] = useState(false);
+            const [records, setRecords] = useState([]);
+            const [loading, setLoading] = useState(false);
+            const [selectedRecord, setSelectedRecord] = useState(null);
+
+            useEffect(() => {
+                fetchData();
+            }, []);
+
+            const fetchData = async () => {
+                setLoading(true);
+                try {
+                    const res = await fetch(`${CONFIG.API_URL}?action=getRecords`);
+                    const data = await res.json();
+                    if (Array.isArray(data)) {
+                        setRecords(data);
+                    }
+                } catch (e) { 
+                    console.error("Error fetching data", e); 
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            const handleAuth = (pwd) => {
+                if(pwd === CONFIG.PASSWORD) {
+                    setIsAuth(true);
+                    setShowAuthModal(false);
+                    setView('record');
+                } else {
+                    alert("รหัสผ่านไม่ถูกต้อง");
+                }
+            };
+
+            return (
+                <div className="min-h-screen flex flex-col">
+                    <nav className="bg-wmk-red text-white shadow-lg sticky top-0 z-40">
+                        <div className="container mx-auto px-4 py-3 flex justify-between items-center">
+                            <div className="flex items-center gap-3">
+                                <img src={CONFIG.LOGO} alt="Logo" className="h-12 w-12 object-contain bg-white rounded-full p-1" />
+                                <div>
+                                    <h1 className="font-bold text-lg leading-tight">ระบบสารสนเทศผลงานครูและนักเรียน</h1>
+                                    <p className="text-xs text-yellow-200">โรงเรียนวัดแม่กะ</p>
+                                </div>
+                            </div>
+                            <div className="hidden md:flex gap-6 items-center">
+                                <button onClick={() => setView('dashboard')} className={`hover:text-yellow-300 ${view === 'dashboard' ? 'text-yellow-300 font-bold underline' : ''}`}>สรุปผล</button>
+                                <button onClick={() => setView('list')} className={`hover:text-yellow-300 ${view === 'list' ? 'text-yellow-300 font-bold underline' : ''}`}>สืบค้นข้อมูล</button>
+                                <button 
+                                    onClick={() => isAuth ? setView('record') : setShowAuthModal(true)} 
+                                    className="bg-wmk-yellow text-black px-4 py-1.5 rounded-full font-bold flex items-center gap-2"
+                                >
+                                    <Icon name="plus-circle" className="w-4 h-4" />
+                                    บันทึกผลงาน
+                                </button>
+                            </div>
+                        </div>
+                    </nav>
+
+                    <main className="flex-grow container mx-auto px-4 py-8 relative">
+                        {loading && (
+                            <div className="fixed inset-0 bg-black/20 flex flex-col items-center justify-center z-50 transition-opacity">
+                                <div className="loader"></div>
+                                <p className="mt-4 font-bold text-wmk-red">กำลังประมวลผล...</p>
+                            </div>
+                        )}
+                        
+                        <div key={view}>
+                            {view === 'dashboard' && <Dashboard records={records} />}
+                            {view === 'record' && <RecordForm onSuccess={() => { fetchData(); setView('list'); }} />}
+                            {view === 'list' && <ListView records={records} onSelect={setSelectedRecord} />}
+                        </div>
+                    </main>
+
+                    {selectedRecord && <DetailModal record={selectedRecord} onClose={() => setSelectedRecord(null)} />}
+
+                    {showAuthModal && (
+                        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+                            <div className="bg-white rounded-xl p-8 w-full max-w-sm shadow-2xl">
+                                <div className="text-center mb-6">
+                                    <div className="bg-red-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                                        <Icon name="lock" className="text-wmk-red w-8 h-8" />
+                                    </div>
+                                    <h2 className="text-2xl font-bold">ยืนยันตัวตน</h2>
+                                    <p className="text-gray-500 text-sm">กรุณาใส่รหัสผ่านเพื่อเข้าสู่ระบบบันทึก</p>
+                                </div>
+                                <input 
+                                    type="password" 
+                                    id="pwdInput"
+                                    className="w-full border-2 border-gray-200 rounded-lg px-4 py-3 mb-4 focus:border-wmk-red outline-none" 
+                                    placeholder="Password"
+                                    onKeyDown={(e) => e.key === 'Enter' && handleAuth(e.target.value)}
+                                />
+                                <div className="flex gap-2">
+                                    <button onClick={() => setShowAuthModal(false)} className="flex-1 py-3 text-gray-500 font-bold text-sm">ยกเลิก</button>
+                                    <button onClick={() => handleAuth(document.getElementById('pwdInput').value)} className="flex-1 btn-primary py-3 rounded-lg font-bold text-sm">เข้าสู่ระบบ</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    <footer className="bg-gray-100 py-6 text-center text-gray-500 text-sm border-t">
+                        &copy; 2024 โรงเรียนวัดแม่กะ - ระบบเทคโนโลยีสารสนเทศเพื่อการศึกษา
+                    </footer>
+                </div>
+            );
+        };
+
+        const Dashboard = ({ records }) => {
+            const [yearFilter, setYearFilter] = useState('2568');
+            const pieCanvasRef = useRef(null);
+            const barCanvasRef = useRef(null);
+            const doughnutCanvasRef = useRef(null);
+            const chartInstances = useRef({});
+
+            const filtered = useMemo(() => records.filter(r => String(r.year) === yearFilter), [records, yearFilter]);
+            
+            const stats = useMemo(() => {
+                const total = filtered.length;
+                const teacherCount = filtered.filter(r => ['ครู', 'ผู้บริหาร', 'เจ้าหน้าที่'].includes(r.status)).length;
+                const studentCount = filtered.filter(r => r.status === 'นักเรียน').length;
+                const cats = {};
+                filtered.forEach(r => cats[r.category] = (cats[r.category] || 0) + 1);
+                const lvls = {};
+                filtered.forEach(r => lvls[r.level] = (lvls[r.level] || 0) + 1);
+                return { total, teacherCount, studentCount, cats, lvls };
+            }, [filtered]);
+
+            useEffect(() => {
+                const renderCharts = () => {
+                    Object.values(chartInstances.current).forEach(chart => chart.destroy());
+                    if (pieCanvasRef.current && Object.keys(stats.cats).length > 0) {
+                        chartInstances.current.pie = new Chart(pieCanvasRef.current, {
+                            type: 'pie',
+                            data: {
+                                labels: Object.keys(stats.cats),
+                                datasets: [{ data: Object.values(stats.cats), backgroundColor: ['#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#6366f1'] }]
+                            },
+                            options: { plugins: { legend: { position: 'bottom', labels: { font: { family: 'Sarabun' } } } } }
+                        });
+                    }
+                    if (barCanvasRef.current) {
+                        chartInstances.current.bar = new Chart(barCanvasRef.current, {
+                            type: 'bar',
+                            data: {
+                                labels: ['ครู/บุคลากร', 'นักเรียน'],
+                                datasets: [{ label: 'จำนวนผลงาน', data: [stats.teacherCount, stats.studentCount], backgroundColor: ['#e63946', '#ffb703'] }]
+                            },
+                            options: { scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }, plugins: { legend: { display: false } } }
+                        });
+                    }
+                    if (doughnutCanvasRef.current && Object.keys(stats.lvls).length > 0) {
+                        chartInstances.current.doughnut = new Chart(doughnutCanvasRef.current, {
+                            type: 'doughnut',
+                            data: {
+                                labels: Object.keys(stats.lvls),
+                                datasets: [{ data: Object.values(stats.lvls), backgroundColor: ['#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#6366f1', '#475569'] }]
+                            },
+                            options: { cutout: '60%', plugins: { legend: { position: 'bottom' } } }
+                        });
+                    }
+                };
+                const timeoutId = setTimeout(renderCharts, 100);
+                return () => { clearTimeout(timeoutId); Object.values(chartInstances.current).forEach(chart => chart.destroy()); };
+            }, [stats]);
+
+            return (
+                <div className="space-y-8 animate-in fade-in duration-500">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <h2 className="text-3xl font-bold flex items-center gap-2">
+                            <Icon name="bar-chart-3" className="text-wmk-red w-8 h-8" />
+                            สรุปข้อมูลภาพรวม
+                        </h2>
+                        <select value={yearFilter} onChange={(e) => setYearFilter(e.target.value)} className="border-2 border-wmk-red rounded-lg px-4 py-2 font-bold outline-none cursor-pointer">
+                            <option value="2568">ปีการศึกษา 2568</option>
+                            <option value="2569">ปีการศึกษา 2569</option>
+                        </select>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div className="card p-6 border-b-4 border-blue-500 flex items-center gap-4">
+                            <div className="bg-blue-100 p-4 rounded-full text-blue-600"><Icon name="files" className="w-8 h-8" /></div>
+                            <div>
+                                <p className="text-gray-500 font-semibold text-sm">ผลงานทั้งหมด</p>
+                                <p className="text-3xl font-bold">{stats.total}</p>
+                            </div>
+                        </div>
+                        <div className="card p-6 border-b-4 border-wmk-red flex items-center gap-4">
+                            <div className="bg-red-100 p-4 rounded-full text-wmk-red"><Icon name="user-check" className="w-8 h-8" /></div>
+                            <div>
+                                <p className="text-gray-500 font-semibold text-sm">ผลงานครู/บุคลากร</p>
+                                <p className="text-3xl font-bold">{stats.teacherCount}</p>
+                            </div>
+                        </div>
+                        <div className="card p-6 border-b-4 border-wmk-yellow flex items-center gap-4">
+                            <div className="bg-yellow-100 p-4 rounded-full text-yellow-600"><Icon name="users" className="w-8 h-8" /></div>
+                            <div>
+                                <p className="text-gray-500 font-semibold text-sm">ผลงานนักเรียน</p>
+                                <p className="text-3xl font-bold">{stats.studentCount}</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div className="card p-6">
+                            <h3 className="font-bold text-center mb-4 text-sm">สัดส่วนประเภทกิจกรรม</h3>
+                            <div className="h-64 flex items-center justify-center">
+                                {stats.total > 0 ? <canvas ref={pieCanvasRef}></canvas> : <p className="text-gray-400 italic text-sm">ไม่มีข้อมูล</p>}
+                            </div>
+                        </div>
+                        <div className="card p-6">
+                            <h3 className="font-bold text-center mb-4 text-sm">เปรียบเทียบครู/นักเรียน</h3>
+                            <div className="h-64 flex items-center justify-center">
+                                <canvas ref={barCanvasRef}></canvas>
+                            </div>
+                        </div>
+                        <div className="card p-6">
+                            <h3 className="font-bold text-center mb-4 text-sm">สัดส่วนงานระดับต่างๆ</h3>
+                            <div className="h-64 flex items-center justify-center">
+                                {stats.total > 0 ? <canvas ref={doughnutCanvasRef}></canvas> : <p className="text-gray-400 italic text-sm">ไม่มีข้อมูล</p>}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const ListView = ({ records, onSelect }) => {
+            const [mode, setMode] = useState('card');
+            const [search, setSearch] = useState('');
+            const [filters, setFilters] = useState({ year: '', category: '' });
+
+            const filtered = useMemo(() => {
+                return records.filter(r => {
+                    const matchesSearch = String(r.activityName || "").toLowerCase().includes(search.toLowerCase()) || String(r.names || "").toLowerCase().includes(search.toLowerCase());
+                    const matchesYear = !filters.year || String(r.year) === filters.year;
+                    const matchesCat = !filters.category || String(r.category) === filters.category;
+                    return matchesSearch && matchesYear && matchesCat;
+                });
+            }, [records, search, filters]);
+
+            const exportExcel = () => {
+                const worksheet = XLSX.utils.json_to_sheet(filtered);
+                const workbook = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(workbook, worksheet, "Records");
+                XLSX.writeFile(workbook, "WMK_Performance_Report.xlsx");
+            };
+
+            return (
+                <div className="space-y-6">
+                    <div className="card p-6">
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                            <div className="md:col-span-2 relative">
+                                <Icon name="search" className="absolute left-3 top-3 text-gray-400 w-5 h-5" />
+                                <input type="text" placeholder="ค้นหาชื่อกิจกรรม หรือ ชื่อครู/นักเรียน..." className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-wmk-red outline-none text-sm" value={search} onChange={(e) => setSearch(e.target.value)} />
+                            </div>
+                            <select className="border rounded-lg p-2 text-sm" value={filters.year} onChange={e => setFilters({...filters, year: e.target.value})}>
+                                <option value="">ทุกปีการศึกษา</option>
+                                <option value="2568">2568</option>
+                                <option value="2569">2569</option>
+                            </select>
+                            <select className="border rounded-lg p-2 text-sm" value={filters.category} onChange={e => setFilters({...filters, category: e.target.value})}>
+                                <option value="">ทุกประเภท</option>
+                                {['การอบรม','การประชุม','การเป็นวิทยากร','รางวัลครู','รางวัลนักเรียน','คณะทำงาน','คณะกรรมการ'].map(c => <option key={c} value={c}>{c}</option>)}
+                            </select>
+                        </div>
+                        <div className="flex flex-wrap justify-between items-center gap-4">
+                            <div className="flex gap-2">
+                                <button onClick={() => setMode('card')} className={`p-2 rounded ${mode === 'card' ? 'bg-wmk-red text-white' : 'bg-gray-100 text-gray-500'}`}><Icon name="layout-grid" className="w-5 h-5" /></button>
+                                <button onClick={() => setMode('table')} className={`p-2 rounded ${mode === 'table' ? 'bg-wmk-red text-white' : 'bg-gray-100 text-gray-500'}`}><Icon name="list" className="w-5 h-5" /></button>
+                            </div>
+                            <button onClick={exportExcel} className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700">
+                                <Icon name="file-spreadsheet" className="w-4 h-4" /> Export Excel
+                            </button>
+                        </div>
+                    </div>
+
+                    {mode === 'card' ? (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                            {filtered.map((r, i) => {
+                                const previewFile = r.files && r.files.find(url => url && (url.includes('drive.google.com') || url.match(/\.(jpg|jpeg|png|gif)$/i)));
+                                return (
+                                    <div key={i} onClick={() => onSelect(r)} className="card overflow-hidden hover:shadow-xl transition-all cursor-pointer group">
+                                        <div className="h-48 bg-gray-100 relative overflow-hidden flex items-center justify-center">
+                                            {previewFile ? (
+                                                <img src={getThumbnailUrl(previewFile)} className="w-full h-full object-cover group-hover:scale-105 transition-transform" alt="" />
+                                            ) : (
+                                                <div className="text-gray-300 flex flex-col items-center">
+                                                    <Icon name="file-text" className="w-12 h-12 mb-2" />
+                                                    <span className="text-[10px] uppercase font-bold tracking-wider">No Image</span>
+                                                </div>
+                                            )}
+                                            <div className="absolute top-2 right-2 flex flex-col gap-1 items-end">
+                                                <span className="bg-wmk-yellow text-black text-[10px] font-bold px-2 py-0.5 rounded shadow">{r.year}</span>
+                                                <span className="bg-wmk-red text-white text-[10px] font-bold px-2 py-0.5 rounded shadow">{r.status}</span>
+                                            </div>
+                                        </div>
+                                        <div className="p-4">
+                                            <h4 className="font-bold text-gray-800 line-clamp-2 mb-2 h-10 text-sm leading-tight">{r.activityName}</h4>
+                                            <p className="text-[10px] text-gray-500 flex items-center gap-1 truncate mb-1"><Icon name="user" className="w-3 h-3" /> {r.names}</p>
+                                            <p className="text-[10px] text-gray-400 flex items-center gap-1 truncate"><Icon name="calendar" className="w-3 h-3" /> {formatThaiDate(r.startDate)}</p>
+                                            <div className="mt-3 pt-3 border-t flex justify-between items-center">
+                                                <span className="text-[10px] font-bold text-wmk-red bg-red-50 px-2 py-0.5 rounded uppercase">{r.level}</span>
+                                                <Icon name="chevron-right" className="w-4 h-4 text-gray-300 group-hover:text-wmk-red" />
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                            {filtered.length === 0 && <div className="col-span-full py-20 text-center text-gray-400 italic text-sm">ไม่พบข้อมูล</div>}
+                        </div>
+                    ) : (
+                        <div className="card overflow-x-auto">
+                            <table className="w-full text-left">
+                                <thead className="bg-gray-50 text-gray-600 font-bold border-b">
+                                    <tr>
+                                        <th className="p-4 text-xs">ปี</th>
+                                        <th className="p-4 text-xs whitespace-nowrap">วันที่</th>
+                                        <th className="p-4 text-xs">กิจกรรม</th>
+                                        <th className="p-4 text-xs">ชื่อผู้รับผิดชอบ</th>
+                                        <th className="p-4 text-xs">ระดับ</th>
+                                        <th className="p-4 text-xs">จัดการ</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y">
+                                    {filtered.map((r, i) => (
+                                        <tr key={i} className="hover:bg-gray-50 transition-colors">
+                                            <td className="p-4 text-xs">{r.year}</td>
+                                            <td className="p-4 text-xs whitespace-nowrap">{formatThaiDate(r.startDate)}</td>
+                                            <td className="p-4 text-sm font-semibold">{r.activityName}</td>
+                                            <td className="p-4 text-xs truncate max-w-[150px]">{r.names}</td>
+                                            <td className="p-4 text-xs"><span className="bg-red-50 text-red-600 px-2 py-1 rounded text-[10px] font-bold">{r.level}</span></td>
+                                            <td className="p-4 text-xs"><button onClick={() => onSelect(r)} className="text-wmk-red font-bold hover:underline">รายละเอียด</button></td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        const DetailModal = ({ record, onClose }) => {
+            const getDownloadUrl = (url) => {
+                if (!url) return "#";
+                return url.replace(/export=view|uc\?id=/g, "export=download&id=");
+            };
+            const isImage = (url) => url && (url.includes('drive.google.com') || url.match(/\.(jpg|jpeg|png|gif)$/i));
+
+            return (
+                <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-2xl animate-in zoom-in-95 duration-200">
+                        <div className="p-6 md:p-8">
+                            <div className="flex justify-between items-start mb-6 border-b pb-4">
+                                <div>
+                                    <div className="flex gap-2 mb-2">
+                                        <span className="bg-wmk-yellow text-black px-3 py-1 rounded-full text-[10px] font-bold shadow-sm">{record.year}</span>
+                                        <span className="bg-wmk-red text-white px-3 py-1 rounded-full text-[10px] font-bold shadow-sm">{record.category}</span>
+                                    </div>
+                                    <h2 className="text-2xl font-bold text-gray-800 leading-tight">{record.activityName}</h2>
+                                </div>
+                                <button onClick={onClose} className="bg-gray-100 p-2 rounded-full hover:bg-gray-200 transition-colors"><Icon name="x" className="w-6 h-6" /></button>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                <div className="space-y-4">
+                                    <InfoRow icon="users" label="ชื่อผู้รับผิดชอบ" value={record.names} />
+                                    <InfoRow icon="user-plus" label="สถานะ" value={record.status} />
+                                    <InfoRow icon="award" label="สิ่งที่ได้รับ" value={record.result} />
+                                    <InfoRow icon="clock" label="จำนวนชั่วโมง" value={record.hours + " ชั่วโมง"} />
+                                    <InfoRow icon="calendar" label="ระยะเวลา" value={`${formatThaiDate(record.startDate)} ถึง ${formatThaiDate(record.endDate)}`} />
+                                    {/* Display only location as requested */}
+                                    <InfoRow icon="map-pin" label="สถานที่" value={record.location} />
+                                    <div className="p-4 bg-gray-50 rounded-lg border border-gray-100">
+                                        <p className="text-[10px] text-gray-400 font-bold uppercase mb-1 tracking-wider">รายละเอียดเพิ่มเติม</p>
+                                        <p className="text-gray-700 text-sm whitespace-pre-wrap leading-relaxed">{record.details || '-'}</p>
+                                    </div>
+                                </div>
+                                <div>
+                                    <h4 className="font-bold mb-4 flex items-center gap-2 text-sm text-wmk-red"><Icon name="paperclip" className="w-4 h-4" /> รูปภาพและไฟล์แนบ (คลิกเพื่อดาวน์โหลด)</h4>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        {record.files && record.files.filter(url => url && url !== "").map((url, i) => (
+                                            <a key={i} href={getDownloadUrl(url)} target="_blank" className="block border border-gray-100 rounded-lg p-2 hover:border-wmk-red hover:shadow-md transition-all group overflow-hidden bg-white relative">
+                                                <div className="h-28 bg-gray-50 rounded mb-2 overflow-hidden flex items-center justify-center relative">
+                                                    {isImage(url) ? (
+                                                        <img src={getThumbnailUrl(url)} className="w-full h-full object-cover group-hover:scale-110 transition-transform" alt="" />
+                                                    ) : (
+                                                        <div className="text-center">
+                                                            <Icon name="file-text" className="w-10 h-10 text-gray-300 mx-auto" />
+                                                            <span className="text-[9px] font-bold text-gray-400">PDF/DOCUMENT</span>
+                                                        </div>
+                                                    )}
+                                                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                                        <Icon name="download" className="text-white w-6 h-6" />
+                                                    </div>
+                                                </div>
+                                                <p className="text-[9px] text-gray-500 truncate text-center font-bold px-1">ไฟล์ที่ {i+1}</p>
+                                            </a>
+                                        ))}
+                                        {(!record.files || record.files.filter(url => url !== "").length === 0) && <div className="col-span-2 py-12 text-center text-gray-300 italic text-xs border-2 border-dashed border-gray-100 rounded-xl">ไม่มีไฟล์แนบ</div>}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const InfoRow = ({ icon, label, value }) => (
+            <div className="flex gap-4 items-center">
+                <div className="bg-red-50 p-2.5 rounded-xl h-11 w-11 flex items-center justify-center flex-shrink-0 text-wmk-red shadow-sm border border-red-100"><Icon name={icon} className="w-5 h-5" /></div>
+                <div className="overflow-hidden">
+                    <p className="text-[9px] text-gray-400 uppercase font-bold tracking-wider">{label}</p>
+                    <p className="text-gray-700 font-semibold text-sm leading-tight truncate">{value || '-'}</p>
+                </div>
+            </div>
+        );
+
+        const RecordForm = ({ onSuccess }) => {
+            const [formData, setFormData] = useState({
+                year: '2568', names: '', status: 'นักเรียน', category: 'การอบรม', activityName: '',
+                result: 'เข้าร่วม', resultCustom: '', details: '', hours: '0', level: 'โรงเรียน',
+                startDate: '', endDate: '', format: 'on-site', agency: '', location: ''
+            });
+            const [fileSlots, setFileSlots] = useState(Array(10).fill(null));
+            const [uploading, setUploading] = useState(false);
+
+            const handleFileChange = (index, file) => {
+                const newSlots = [...fileSlots];
+                newSlots[index] = file;
+                setFileSlots(newSlots);
+            };
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                setUploading(true);
+                try {
+                    const fileData = await Promise.all(
+                        fileSlots.map(file => {
+                            if (!file) return Promise.resolve(null);
+                            return new Promise((resolve) => {
+                                const reader = new FileReader();
+                                reader.onload = (e) => resolve({
+                                    name: file.name,
+                                    type: file.type,
+                                    base64: e.target.result.split(',')[1]
+                                });
+                                reader.readAsDataURL(file);
+                            });
+                        })
+                    );
+
+                    const payload = {
+                        action: 'saveRecord',
+                        ...formData,
+                        result: formData.result === 'อื่นๆ' ? formData.resultCustom : formData.result,
+                        files: fileData
+                    };
+
+                    await fetch(CONFIG.API_URL, {
+                        method: 'POST',
+                        mode: 'no-cors',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    
+                    alert("ส่งข้อมูลเรียบร้อยแล้ว");
+                    onSuccess();
+                } catch (e) {
+                    alert("เกิดข้อผิดพลาด: " + e.message);
+                } finally {
+                    setUploading(false);
+                }
+            };
+
+            return (
+                <div className="max-w-4xl mx-auto animate-in slide-in-from-bottom-10 duration-500 pb-12">
+                    <h2 className="text-3xl font-bold mb-8 flex items-center gap-3"><Icon name="plus-circle" className="text-wmk-red w-8 h-8" /> บันทึกข้อมูลผลงานใหม่</h2>
+                    <form onSubmit={handleSubmit} className="card p-8 space-y-8 border-t-8 border-wmk-red shadow-xl">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="space-y-4">
+                                <label className="block"><span className="text-gray-700 font-bold text-sm">ปีการศึกษา</span><select className="mt-1 block w-full border border-gray-300 rounded-lg p-2.5 text-sm outline-none shadow-sm" value={formData.year} onChange={e => setFormData({...formData, year: e.target.value})}><option value="2568">2568</option><option value="2569">2569</option></select></label>
+                                <label className="block"><span className="text-gray-700 font-bold text-sm">สถานะ</span><select className="mt-1 block w-full border border-gray-300 rounded-lg p-2.5 text-sm outline-none shadow-sm" value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})}><option value="นักเรียน">นักเรียน</option><option value="ครู">ครู</option><option value="ผู้บริหาร">ผู้บริหาร</option><option value="เจ้าหน้าที่">เจ้าหน้าที่</option></select></label>
+                            </div>
+                            <label className="block"><span className="text-gray-700 font-bold text-sm">ชื่อผู้รับผิดชอบ (คั่นด้วยเครื่องหมาย ,)</span><textarea className="mt-1 block w-full border border-gray-300 rounded-lg p-2.5 h-[108px] text-sm outline-none shadow-sm" placeholder="เช่น นายสมชาย ใจดี..." required value={formData.names} onChange={e => setFormData({...formData, names: e.target.value})}></textarea></label>
+                            <label className="block md:col-span-2"><span className="text-gray-700 font-bold text-sm">ชื่อกิจกรรม/โครงการ</span><input type="text" className="mt-1 block w-full border border-gray-300 rounded-lg p-2.5 text-sm outline-none shadow-sm" required value={formData.activityName} onChange={e => setFormData({...formData, activityName: e.target.value})} /></label>
+                            <label className="block"><span className="text-gray-700 font-bold text-sm">ประเภทกิจกรรม</span><select className="mt-1 block w-full border border-gray-300 rounded-lg p-2.5 text-sm outline-none shadow-sm" value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})}>{['การอบรม','การประชุม','การเป็นวิทยากร','รางวัลครู','รางวัลนักเรียน','คณะทำงาน','คณะกรรมการ'].map(c => <option key={c} value={c}>{c}</option>)}</select></label>
+                            <label className="block"><span className="text-gray-700 font-bold text-sm">สิ่งที่ได้รับ/ผลสำเร็จ</span><div className="flex gap-2"><select className="mt-1 block w-full border border-gray-300 rounded-lg p-2.5 text-sm outline-none flex-grow shadow-sm" value={formData.result} onChange={e => setFormData({...formData, result: e.target.value})}>{['เข้าร่วม','การเป็นวิทยากร','การเป็นคณะทำงาน','การเป็นคณะกรรมการ','รางวัลชนะเลิศ','รางวัลรองชนะเลิศ อันดับ 1','รางวัลรองชนะเลิศ อันดับ 2','รางวัลชมเชย','รางวัลระดับเหรียญทอง','รางวัลระดับเหรียญเงิน','รางวัลระดับเหรียญทองแดง','รางวัลระดับดีเด่น','รางวัลระดับดีเยี่ยม','อื่นๆ'].map(r => <option key={r} value={r}>{r}</option>)}</select>{formData.result === 'อื่นๆ' && <input type="text" placeholder="ระบุเอง..." className="mt-1 block w-full border border-gray-300 rounded-lg p-2.5 text-sm outline-none shadow-sm" required value={formData.resultCustom} onChange={e => setFormData({...formData, resultCustom: e.target.value})} />}</div></label>
+                            <label className="block"><span className="text-gray-700 font-bold text-sm">จำนวนชั่วโมงอบรม (ใส่ 0 หากไม่มี)</span><input type="number" className="mt-1 block w-full border border-gray-300 rounded-lg p-2.5 text-sm outline-none shadow-sm" value={formData.hours} onChange={e => setFormData({...formData, hours: e.target.value})} /></label>
+                            <label className="block"><span className="text-gray-700 font-bold text-sm">งานระดับ</span><select className="mt-1 block w-full border border-gray-300 rounded-lg p-2.5 text-sm outline-none shadow-sm" value={formData.level} onChange={e => setFormData({...formData, level: e.target.value})}>{['โรงเรียน','ตำบล','อำเภอ','เครือข่ายพัฒนาคุณภาพการศึกษา','เขตพื้นที่การศึกษา','จังหวัด','ภาค','เขตตรวจราชการ','ประเทศ','นานาชาติ'].map(l => <option key={l} value={l}>{l}</option>)}</select></label>
+                            <label className="block"><span className="text-gray-700 font-bold text-sm">ตั้งแต่วันที่</span><input type="date" className="mt-1 block w-full border border-gray-300 rounded-lg p-2.5 text-sm outline-none shadow-sm" required value={formData.startDate} onChange={e => setFormData({...formData, startDate: e.target.value})} /></label>
+                            <label className="block"><span className="text-gray-700 font-bold text-sm">ถึงวันที่</span><input type="date" className="mt-1 block w-full border border-gray-300 rounded-lg p-2.5 text-sm outline-none shadow-sm" required value={formData.endDate} onChange={e => setFormData({...formData, endDate: e.target.value})} /></label>
+                            <label className="block"><span className="text-gray-700 font-bold text-sm">รูปแบบกิจกรรม</span><select className="mt-1 block w-full border border-gray-300 rounded-lg p-2.5 text-sm outline-none shadow-sm" value={formData.format} onChange={e => setFormData({...formData, format: e.target.value})}><option value="on-site">On-site</option><option value="online">Online</option></select></label>
+                            <label className="block"><span className="text-gray-700 font-bold text-sm">หน่วยงานที่จัด</span><input type="text" className="mt-1 block w-full border border-gray-300 rounded-lg p-2.5 text-sm outline-none shadow-sm" value={formData.agency} onChange={e => setFormData({...formData, agency: e.target.value})} /></label>
+                            <label className="block md:col-span-2"><span className="text-gray-700 font-bold text-sm">สถานที่</span><input type="text" className="mt-1 block w-full border border-gray-300 rounded-lg p-2.5 text-sm outline-none shadow-sm" value={formData.location} onChange={e => setFormData({...formData, location: e.target.value})} /></label>
+                            <label className="block md:col-span-2"><span className="text-gray-700 font-bold text-sm">รายละเอียดของงาน</span><textarea className="mt-1 block w-full border border-gray-300 rounded-lg p-2.5 text-sm outline-none shadow-sm" rows="3" value={formData.details} onChange={e => setFormData({...formData, details: e.target.value})}></textarea></label>
+                            <div className="md:col-span-2 mt-4 bg-gray-50 p-6 rounded-xl border border-gray-200 shadow-inner">
+                                <h3 className="text-lg font-bold text-wmk-red mb-4 flex items-center gap-2"><Icon name="paperclip" className="w-5 h-5" /> รูปภาพและไฟล์แนบ (สูงสุด 10 ช่อง)</h3>
+                                <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+                                    {fileSlots.map((slot, idx) => (
+                                        <div key={idx} className="relative group">
+                                            <label className={`flex flex-col items-center justify-center h-24 border-2 border-dashed rounded-xl cursor-pointer transition-all shadow-sm ${slot ? 'border-green-500 bg-green-50' : 'border-gray-300 hover:border-wmk-red bg-white'}`}>
+                                                {slot ? (
+                                                    <div className="text-center px-1 overflow-hidden w-full"><Icon name="check-circle" className="text-green-500 w-6 h-6 mx-auto mb-1" /><p className="text-[8px] text-green-700 truncate font-bold uppercase">{slot.name}</p></div>
+                                                ) : (
+                                                    <div className="text-center"><Icon name="plus" className="text-gray-400 w-6 h-6 mx-auto" /><p className="text-[10px] text-gray-400 font-bold mt-1">ช่องที่ {idx + 1}</p></div>
+                                                )}
+                                                <input type="file" className="hidden" accept="image/*,application/pdf" onChange={e => handleFileChange(idx, e.target.files[0] || null)} />
+                                            </label>
+                                            {slot && <button type="button" onClick={() => handleFileChange(idx, null)} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-lg hover:bg-red-600 transition-colors"><Icon name="x" className="w-3 h-3" /></button>}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                        <div className="pt-6 border-t flex flex-col md:flex-row justify-center gap-4">
+                            <button type="button" onClick={() => window.location.reload()} className="px-10 py-3 text-gray-500 font-bold border rounded-xl hover:bg-gray-50 text-sm">ล้างข้อมูล</button>
+                            <button type="submit" disabled={uploading} className={`btn-primary px-16 py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg ${uploading ? 'opacity-50 cursor-wait' : ''}`}>
+                                {uploading ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div> กำลังบันทึก...</> : <>บันทึกผลงาน <Icon name="send" className="w-4 h-4" /></>}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
