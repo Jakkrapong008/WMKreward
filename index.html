@@ -24,6 +24,10 @@
         .loader { border: 4px solid #f3f3f3; border-top: 4px solid #e63946; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         [data-lucide] { display: inline-block; min-width: 1em; min-height: 1em; }
+        
+        /* Mobile Menu Animation */
+        .mobile-menu-enter { transform: translateY(-100%); transition: transform 0.3s ease-out; }
+        .mobile-menu-enter-active { transform: translateY(0); }
     </style>
 </head>
 <body>
@@ -60,10 +64,10 @@
             return `${day} ${month} ${year}`;
         };
 
-        // Helper function to convert Drive URL to Thumbnail URL
+        // Helper function to convert Drive URL to Thumbnail URL correctly
         const getThumbnailUrl = (url) => {
             if (!url || typeof url !== 'string') return null;
-            const match = url.match(/id=([^&]+)/);
+            const match = url.match(/[id=|\/d\/]([a-zA-Z0-9_-]{25,})/);
             if (match && match[1]) {
                 return `https://drive.google.com/thumbnail?id=${match[1]}&sz=w800`;
             }
@@ -88,6 +92,7 @@
             const [records, setRecords] = useState([]);
             const [loading, setLoading] = useState(false);
             const [selectedRecord, setSelectedRecord] = useState(null);
+            const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
             useEffect(() => {
                 fetchData();
@@ -113,34 +118,69 @@
                     setIsAuth(true);
                     setShowAuthModal(false);
                     setView('record');
+                    setIsMobileMenuOpen(false);
                 } else {
                     alert("รหัสผ่านไม่ถูกต้อง");
                 }
             };
 
+            const navigate = (target) => {
+                if (target === 'record' && !isAuth) {
+                    setShowAuthModal(true);
+                } else {
+                    setView(target);
+                }
+                setIsMobileMenuOpen(false);
+            };
+
             return (
                 <div className="min-h-screen flex flex-col">
+                    {/* Navbar */}
                     <nav className="bg-wmk-red text-white shadow-lg sticky top-0 z-40">
                         <div className="container mx-auto px-4 py-3 flex justify-between items-center">
                             <div className="flex items-center gap-3">
-                                <img src={CONFIG.LOGO} alt="Logo" className="h-12 w-12 object-contain bg-white rounded-full p-1" />
+                                <img src={CONFIG.LOGO} alt="Logo" className="h-10 w-10 md:h-12 md:w-12 object-contain bg-white rounded-full p-1" />
                                 <div>
-                                    <h1 className="font-bold text-lg leading-tight">ระบบสารสนเทศผลงานครูและนักเรียน</h1>
-                                    <p className="text-xs text-yellow-200">โรงเรียนวัดแม่กะ</p>
+                                    <h1 className="font-bold text-sm md:text-lg leading-tight">ระบบสารสนเทศผลงานครูและนักเรียน</h1>
+                                    <p className="text-[10px] md:text-xs text-yellow-200">โรงเรียนวัดแม่กะ</p>
                                 </div>
                             </div>
+                            
+                            {/* Desktop Menu */}
                             <div className="hidden md:flex gap-6 items-center">
-                                <button onClick={() => setView('dashboard')} className={`hover:text-yellow-300 ${view === 'dashboard' ? 'text-yellow-300 font-bold underline' : ''}`}>สรุปผล</button>
-                                <button onClick={() => setView('list')} className={`hover:text-yellow-300 ${view === 'list' ? 'text-yellow-300 font-bold underline' : ''}`}>สืบค้นข้อมูล</button>
+                                <button onClick={() => navigate('dashboard')} className={`hover:text-yellow-300 transition-colors ${view === 'dashboard' ? 'text-yellow-300 font-bold underline' : ''}`}>สรุปผล</button>
+                                <button onClick={() => navigate('list')} className={`hover:text-yellow-300 transition-colors ${view === 'list' ? 'text-yellow-300 font-bold underline' : ''}`}>สืบค้นข้อมูล</button>
                                 <button 
-                                    onClick={() => isAuth ? setView('record') : setShowAuthModal(true)} 
-                                    className="bg-wmk-yellow text-black px-4 py-1.5 rounded-full font-bold flex items-center gap-2"
+                                    onClick={() => navigate('record')} 
+                                    className="bg-wmk-yellow text-black px-4 py-1.5 rounded-full font-bold flex items-center gap-2 hover:scale-105 transition-transform"
                                 >
                                     <Icon name="plus-circle" className="w-4 h-4" />
                                     บันทึกผลงาน
                                 </button>
                             </div>
+
+                            {/* Mobile Hamburger Button */}
+                            <div className="md:hidden">
+                                <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2 text-white outline-none">
+                                    <Icon name={isMobileMenuOpen ? "x" : "menu"} className="w-6 h-6" />
+                                </button>
+                            </div>
                         </div>
+
+                        {/* Mobile Menu Dropdown */}
+                        {isMobileMenuOpen && (
+                            <div className="md:hidden bg-wmk-red border-t border-red-400 py-4 px-6 flex flex-col gap-4 animate-in fade-in slide-in-from-top-4 duration-200">
+                                <button onClick={() => navigate('dashboard')} className="flex items-center gap-3 text-left py-2 font-bold hover:text-yellow-300">
+                                    <Icon name="bar-chart-3" /> สรุปผล
+                                </button>
+                                <button onClick={() => navigate('list')} className="flex items-center gap-3 text-left py-2 font-bold hover:text-yellow-300">
+                                    <Icon name="search" /> สืบค้นข้อมูล
+                                </button>
+                                <button onClick={() => navigate('record')} className="flex items-center gap-3 text-left py-2 font-bold text-yellow-300">
+                                    <Icon name="plus-circle" /> บันทึกผลงาน
+                                </button>
+                            </div>
+                        )}
                     </nav>
 
                     <main className="flex-grow container mx-auto px-4 py-8 relative">
@@ -185,7 +225,7 @@
                         </div>
                     )}
 
-                    <footer className="bg-gray-100 py-6 text-center text-gray-500 text-sm border-t">
+                    <footer className="bg-gray-100 py-6 text-center text-gray-500 text-sm border-t mt-12">
                         &copy; 2024 โรงเรียนวัดแม่กะ - ระบบเทคโนโลยีสารสนเทศเพื่อการศึกษา
                     </footer>
                 </div>
@@ -253,34 +293,34 @@
             return (
                 <div className="space-y-8 animate-in fade-in duration-500">
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                        <h2 className="text-3xl font-bold flex items-center gap-2">
-                            <Icon name="bar-chart-3" className="text-wmk-red w-8 h-8" />
+                        <h2 className="text-2xl md:text-3xl font-bold flex items-center gap-2 text-wmk-red">
+                            <Icon name="bar-chart-3" className="w-8 h-8" />
                             สรุปข้อมูลภาพรวม
                         </h2>
-                        <select value={yearFilter} onChange={(e) => setYearFilter(e.target.value)} className="border-2 border-wmk-red rounded-lg px-4 py-2 font-bold outline-none cursor-pointer">
+                        <select value={yearFilter} onChange={(e) => setYearFilter(e.target.value)} className="border-2 border-wmk-red rounded-lg px-4 py-2 font-bold outline-none cursor-pointer text-sm">
                             <option value="2568">ปีการศึกษา 2568</option>
                             <option value="2569">ปีการศึกษา 2569</option>
                         </select>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-center md:text-left">
                         <div className="card p-6 border-b-4 border-blue-500 flex items-center gap-4">
-                            <div className="bg-blue-100 p-4 rounded-full text-blue-600"><Icon name="files" className="w-8 h-8" /></div>
-                            <div>
+                            <div className="bg-blue-100 p-4 rounded-full text-blue-600 hidden sm:block"><Icon name="files" className="w-8 h-8" /></div>
+                            <div className="flex-grow">
                                 <p className="text-gray-500 font-semibold text-sm">ผลงานทั้งหมด</p>
                                 <p className="text-3xl font-bold">{stats.total}</p>
                             </div>
                         </div>
                         <div className="card p-6 border-b-4 border-wmk-red flex items-center gap-4">
-                            <div className="bg-red-100 p-4 rounded-full text-wmk-red"><Icon name="user-check" className="w-8 h-8" /></div>
-                            <div>
+                            <div className="bg-red-100 p-4 rounded-full text-wmk-red hidden sm:block"><Icon name="user-check" className="w-8 h-8" /></div>
+                            <div className="flex-grow">
                                 <p className="text-gray-500 font-semibold text-sm">ผลงานครู/บุคลากร</p>
                                 <p className="text-3xl font-bold">{stats.teacherCount}</p>
                             </div>
                         </div>
                         <div className="card p-6 border-b-4 border-wmk-yellow flex items-center gap-4">
-                            <div className="bg-yellow-100 p-4 rounded-full text-yellow-600"><Icon name="users" className="w-8 h-8" /></div>
-                            <div>
+                            <div className="bg-yellow-100 p-4 rounded-full text-yellow-600 hidden sm:block"><Icon name="users" className="w-8 h-8" /></div>
+                            <div className="flex-grow">
                                 <p className="text-gray-500 font-semibold text-sm">ผลงานนักเรียน</p>
                                 <p className="text-3xl font-bold">{stats.studentCount}</p>
                             </div>
@@ -314,14 +354,33 @@
         const ListView = ({ records, onSelect }) => {
             const [mode, setMode] = useState('card');
             const [search, setSearch] = useState('');
-            const [filters, setFilters] = useState({ year: '', category: '' });
+            const [filters, setFilters] = useState({ 
+                year: '', 
+                category: '', 
+                status: '', 
+                level: '', 
+                startDate: '', 
+                endDate: '' 
+            });
 
             const filtered = useMemo(() => {
                 return records.filter(r => {
                     const matchesSearch = String(r.activityName || "").toLowerCase().includes(search.toLowerCase()) || String(r.names || "").toLowerCase().includes(search.toLowerCase());
                     const matchesYear = !filters.year || String(r.year) === filters.year;
                     const matchesCat = !filters.category || String(r.category) === filters.category;
-                    return matchesSearch && matchesYear && matchesCat;
+                    const matchesStatus = !filters.status || String(r.status) === filters.status;
+                    const matchesLevel = !filters.level || String(r.level) === filters.level;
+                    
+                    // Date filtering
+                    let matchesDate = true;
+                    if (filters.startDate && filters.endDate) {
+                        const start = new Date(filters.startDate);
+                        const end = new Date(filters.endDate);
+                        const recordDate = new Date(r.startDate);
+                        matchesDate = recordDate >= start && recordDate <= end;
+                    }
+
+                    return matchesSearch && matchesYear && matchesCat && matchesStatus && matchesLevel && matchesDate;
                 });
             }, [records, search, filters]);
 
@@ -334,11 +393,19 @@
 
             return (
                 <div className="space-y-6">
-                    <div className="card p-6">
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                            <div className="md:col-span-2 relative">
-                                <Icon name="search" className="absolute left-3 top-3 text-gray-400 w-5 h-5" />
-                                <input type="text" placeholder="ค้นหาชื่อกิจกรรม หรือ ชื่อครู/นักเรียน..." className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-wmk-red outline-none text-sm" value={search} onChange={(e) => setSearch(e.target.value)} />
+                    {/* Advanced Filters */}
+                    <div className="card p-6 border-t-4 border-wmk-yellow">
+                        <h3 className="font-bold mb-4 flex items-center gap-2"><Icon name="filter" /> ตัวกรองข้อมูล</h3>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                            <div className="relative">
+                                <Icon name="search" className="absolute left-3 top-3 text-gray-400 w-4 h-4" />
+                                <input 
+                                    type="text" 
+                                    placeholder="ชื่อกิจกรรม/ผู้รับผิดชอบ..." 
+                                    className="w-full pl-9 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-wmk-red outline-none text-sm" 
+                                    value={search} 
+                                    onChange={(e) => setSearch(e.target.value)} 
+                                />
                             </div>
                             <select className="border rounded-lg p-2 text-sm" value={filters.year} onChange={e => setFilters({...filters, year: e.target.value})}>
                                 <option value="">ทุกปีการศึกษา</option>
@@ -346,11 +413,33 @@
                                 <option value="2569">2569</option>
                             </select>
                             <select className="border rounded-lg p-2 text-sm" value={filters.category} onChange={e => setFilters({...filters, category: e.target.value})}>
-                                <option value="">ทุกประเภท</option>
+                                <option value="">ทุกประเภทกิจกรรม</option>
                                 {['การอบรม','การประชุม','การเป็นวิทยากร','รางวัลครู','รางวัลนักเรียน','คณะทำงาน','คณะกรรมการ'].map(c => <option key={c} value={c}>{c}</option>)}
                             </select>
+                            <select className="border rounded-lg p-2 text-sm" value={filters.status} onChange={e => setFilters({...filters, status: e.target.value})}>
+                                <option value="">ทุกสถานะ</option>
+                                {['นักเรียน','ครู','ผู้บริหาร','เจ้าหน้าที่'].map(s => <option key={s} value={s}>{s}</option>)}
+                            </select>
+                            <select className="border rounded-lg p-2 text-sm" value={filters.level} onChange={e => setFilters({...filters, level: e.target.value})}>
+                                <option value="">ทุกระดับงาน</option>
+                                {['โรงเรียน','ตำบล','อำเภอ','เครือข่ายพัฒนาคุณภาพการศึกษา','เขตพื้นที่การศึกษา','จังหวัด','ภาค','เขตตรวจราชการ','ประเทศ','นานาชาติ'].map(l => <option key={l} value={l}>{l}</option>)}
+                            </select>
+                            <div className="flex flex-col gap-1">
+                                <label className="text-[10px] font-bold text-gray-400 px-1 uppercase">ตั้งแต่วันที่</label>
+                                <input type="date" className="border rounded-lg p-2 text-sm" value={filters.startDate} onChange={e => setFilters({...filters, startDate: e.target.value})} />
+                            </div>
+                            <div className="flex flex-col gap-1">
+                                <label className="text-[10px] font-bold text-gray-400 px-1 uppercase">ถึงวันที่</label>
+                                <input type="date" className="border rounded-lg p-2 text-sm" value={filters.endDate} onChange={e => setFilters({...filters, endDate: e.target.value})} />
+                            </div>
+                            <div className="flex items-end">
+                                <button onClick={() => setFilters({ year: '', category: '', status: '', level: '', startDate: '', endDate: '' })} className="w-full bg-gray-200 text-gray-700 py-2 rounded-lg text-sm font-bold hover:bg-gray-300">
+                                    ล้างตัวกรอง
+                                </button>
+                            </div>
                         </div>
-                        <div className="flex flex-wrap justify-between items-center gap-4">
+
+                        <div className="flex flex-wrap justify-between items-center gap-4 pt-4 border-t">
                             <div className="flex gap-2">
                                 <button onClick={() => setMode('card')} className={`p-2 rounded ${mode === 'card' ? 'bg-wmk-red text-white' : 'bg-gray-100 text-gray-500'}`}><Icon name="layout-grid" className="w-5 h-5" /></button>
                                 <button onClick={() => setMode('table')} className={`p-2 rounded ${mode === 'table' ? 'bg-wmk-red text-white' : 'bg-gray-100 text-gray-500'}`}><Icon name="list" className="w-5 h-5" /></button>
@@ -393,7 +482,7 @@
                                     </div>
                                 );
                             })}
-                            {filtered.length === 0 && <div className="col-span-full py-20 text-center text-gray-400 italic text-sm">ไม่พบข้อมูล</div>}
+                            {filtered.length === 0 && <div className="col-span-full py-20 text-center text-gray-400 italic text-sm">ไม่พบข้อมูลที่ค้นหา</div>}
                         </div>
                     ) : (
                         <div className="card overflow-x-auto">
@@ -428,14 +517,21 @@
         };
 
         const DetailModal = ({ record, onClose }) => {
-            const getDownloadUrl = (url) => {
-                if (!url) return "#";
-                return url.replace(/export=view|uc\?id=/g, "export=download&id=");
+            // Function to generate valid direct download/view URL
+            const getDirectUrl = (url) => {
+                if (!url || typeof url !== 'string') return "#";
+                const match = url.match(/[id=|\/d\/]([a-zA-Z0-9_-]{25,})/);
+                if (match && match[1]) {
+                    // Using direct link structure that bypasses the 400 bad request in many environments
+                    return `https://drive.google.com/uc?export=download&id=${match[1]}`;
+                }
+                return url;
             };
+
             const isImage = (url) => url && (url.includes('drive.google.com') || url.match(/\.(jpg|jpeg|png|gif)$/i));
 
             return (
-                <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+                <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 overflow-y-auto">
                     <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-2xl animate-in zoom-in-95 duration-200">
                         <div className="p-6 md:p-8">
                             <div className="flex justify-between items-start mb-6 border-b pb-4">
@@ -456,7 +552,6 @@
                                     <InfoRow icon="award" label="สิ่งที่ได้รับ" value={record.result} />
                                     <InfoRow icon="clock" label="จำนวนชั่วโมง" value={record.hours + " ชั่วโมง"} />
                                     <InfoRow icon="calendar" label="ระยะเวลา" value={`${formatThaiDate(record.startDate)} ถึง ${formatThaiDate(record.endDate)}`} />
-                                    {/* Display only location as requested */}
                                     <InfoRow icon="map-pin" label="สถานที่" value={record.location} />
                                     <div className="p-4 bg-gray-50 rounded-lg border border-gray-100">
                                         <p className="text-[10px] text-gray-400 font-bold uppercase mb-1 tracking-wider">รายละเอียดเพิ่มเติม</p>
@@ -467,21 +562,21 @@
                                     <h4 className="font-bold mb-4 flex items-center gap-2 text-sm text-wmk-red"><Icon name="paperclip" className="w-4 h-4" /> รูปภาพและไฟล์แนบ (คลิกเพื่อดาวน์โหลด)</h4>
                                     <div className="grid grid-cols-2 gap-3">
                                         {record.files && record.files.filter(url => url && url !== "").map((url, i) => (
-                                            <a key={i} href={getDownloadUrl(url)} target="_blank" className="block border border-gray-100 rounded-lg p-2 hover:border-wmk-red hover:shadow-md transition-all group overflow-hidden bg-white relative">
+                                            <a key={i} href={getDirectUrl(url)} target="_blank" rel="noopener noreferrer" className="block border border-gray-100 rounded-lg p-2 hover:border-wmk-red hover:shadow-md transition-all group overflow-hidden bg-white relative">
                                                 <div className="h-28 bg-gray-50 rounded mb-2 overflow-hidden flex items-center justify-center relative">
                                                     {isImage(url) ? (
                                                         <img src={getThumbnailUrl(url)} className="w-full h-full object-cover group-hover:scale-110 transition-transform" alt="" />
                                                     ) : (
                                                         <div className="text-center">
                                                             <Icon name="file-text" className="w-10 h-10 text-gray-300 mx-auto" />
-                                                            <span className="text-[9px] font-bold text-gray-400">PDF/DOCUMENT</span>
+                                                            <span className="text-[9px] font-bold text-gray-400 uppercase">Document</span>
                                                         </div>
                                                     )}
                                                     <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                                                         <Icon name="download" className="text-white w-6 h-6" />
                                                     </div>
                                                 </div>
-                                                <p className="text-[9px] text-gray-500 truncate text-center font-bold px-1">ไฟล์ที่ {i+1}</p>
+                                                <p className="text-[9px] text-gray-500 truncate text-center font-bold px-1">ไฟล์แนบที่ {i+1}</p>
                                             </a>
                                         ))}
                                         {(!record.files || record.files.filter(url => url !== "").length === 0) && <div className="col-span-2 py-12 text-center text-gray-300 italic text-xs border-2 border-dashed border-gray-100 rounded-xl">ไม่มีไฟล์แนบ</div>}
@@ -563,8 +658,8 @@
 
             return (
                 <div className="max-w-4xl mx-auto animate-in slide-in-from-bottom-10 duration-500 pb-12">
-                    <h2 className="text-3xl font-bold mb-8 flex items-center gap-3"><Icon name="plus-circle" className="text-wmk-red w-8 h-8" /> บันทึกข้อมูลผลงานใหม่</h2>
-                    <form onSubmit={handleSubmit} className="card p-8 space-y-8 border-t-8 border-wmk-red shadow-xl">
+                    <h2 className="text-2xl md:text-3xl font-bold mb-8 flex items-center gap-3 text-wmk-red"><Icon name="plus-circle" className="w-8 h-8" /> บันทึกข้อมูลผลงานใหม่</h2>
+                    <form onSubmit={handleSubmit} className="card p-4 md:p-8 space-y-8 border-t-8 border-wmk-red shadow-xl">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div className="space-y-4">
                                 <label className="block"><span className="text-gray-700 font-bold text-sm">ปีการศึกษา</span><select className="mt-1 block w-full border border-gray-300 rounded-lg p-2.5 text-sm outline-none shadow-sm" value={formData.year} onChange={e => setFormData({...formData, year: e.target.value})}><option value="2568">2568</option><option value="2569">2569</option></select></label>
@@ -602,7 +697,7 @@
                             </div>
                         </div>
                         <div className="pt-6 border-t flex flex-col md:flex-row justify-center gap-4">
-                            <button type="button" onClick={() => window.location.reload()} className="px-10 py-3 text-gray-500 font-bold border rounded-xl hover:bg-gray-50 text-sm">ล้างข้อมูล</button>
+                            <button type="button" onClick={() => window.location.reload()} className="px-10 py-3 text-gray-500 font-bold border rounded-xl hover:bg-gray-50 text-sm transition-colors">ล้างข้อมูล</button>
                             <button type="submit" disabled={uploading} className={`btn-primary px-16 py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg ${uploading ? 'opacity-50 cursor-wait' : ''}`}>
                                 {uploading ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div> กำลังบันทึก...</> : <>บันทึกผลงาน <Icon name="send" className="w-4 h-4" /></>}
                             </button>
