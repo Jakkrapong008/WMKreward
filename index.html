@@ -364,7 +364,8 @@
             });
 
             const filtered = useMemo(() => {
-                return records.filter(r => {
+                // กรองข้อมูลตามเงื่อนไข
+                let result = records.filter(r => {
                     const matchesSearch = String(r.activityName || "").toLowerCase().includes(search.toLowerCase()) || String(r.names || "").toLowerCase().includes(search.toLowerCase());
                     const matchesYear = !filters.year || String(r.year) === filters.year;
                     const matchesCat = !filters.category || String(r.category) === filters.category;
@@ -382,13 +383,50 @@
 
                     return matchesSearch && matchesYear && matchesCat && matchesStatus && matchesLevel && matchesDate;
                 });
+
+                // เพิ่มส่วนการเรียงลำดับ: เรียงตาม startDate จากน้อยไปมาก
+                result.sort((a, b) => {
+                    const dateA = a.startDate ? new Date(a.startDate).getTime() : 0;
+                    const dateB = b.startDate ? new Date(b.startDate).getTime() : 0;
+                    return dateA - dateB;
+                });
+
+                return result;
             }, [records, search, filters]);
 
+            // แก้ไขฟังก์ชัน Export Excel ให้ตรงกับ Google Sheets
             const exportExcel = () => {
-                const worksheet = XLSX.utils.json_to_sheet(filtered);
+                const dataForExport = filtered.map(r => {
+                    // สร้างแถวข้อมูลที่จัดเรียงคอลัมน์ตามความต้องการ
+                    const row = {
+                        "ปีการศึกษา": r.year,
+                        "ชื่อผู้รับผิดชอบ": r.names,
+                        "สถานะ": r.status,
+                        "ประเภทกิจกรรม": r.category,
+                        "ชื่อกิจกรรม": r.activityName,
+                        "สิ่งที่ได้รับ/ผลสำเร็จ": r.result,
+                        "จำนวนชั่วโมง": r.hours,
+                        "ระดับงาน": r.level,
+                        "วันที่เริ่ม": r.startDate, 
+                        "วันที่สิ้นสุด": r.endDate,
+                        "รูปแบบ": r.format,
+                        "หน่วยงานที่จัด": r.agency,
+                        "สถานที่": r.location,
+                        "รายละเอียด": r.details
+                    };
+
+                    // กระจายไฟล์แนบจาก Array เป็นคอลัมน์ files1 ถึง files10
+                    for (let i = 0; i < 10; i++) {
+                        row[`files${i + 1}`] = (r.files && r.files[i]) ? r.files[i] : "";
+                    }
+
+                    return row;
+                });
+
+                const worksheet = XLSX.utils.json_to_sheet(dataForExport);
                 const workbook = XLSX.utils.book_new();
                 XLSX.utils.book_append_sheet(workbook, worksheet, "Records");
-                XLSX.writeFile(workbook, "WMK_Performance_Report.xlsx");
+                XLSX.writeFile(workbook, "WMK_Reward_System_Report.xlsx");
             };
 
             return (
@@ -444,7 +482,7 @@
                                 <button onClick={() => setMode('card')} className={`p-2 rounded ${mode === 'card' ? 'bg-wmk-red text-white' : 'bg-gray-100 text-gray-500'}`}><Icon name="layout-grid" className="w-5 h-5" /></button>
                                 <button onClick={() => setMode('table')} className={`p-2 rounded ${mode === 'table' ? 'bg-wmk-red text-white' : 'bg-gray-100 text-gray-500'}`}><Icon name="list" className="w-5 h-5" /></button>
                             </div>
-                            <button onClick={exportExcel} className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700">
+                            <button onClick={exportExcel} className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700 shadow-md">
                                 <Icon name="file-spreadsheet" className="w-4 h-4" /> Export Excel
                             </button>
                         </div>
@@ -517,12 +555,10 @@
         };
 
         const DetailModal = ({ record, onClose }) => {
-            // Function to generate valid direct download/view URL
             const getDirectUrl = (url) => {
                 if (!url || typeof url !== 'string') return "#";
                 const match = url.match(/[id=|\/d\/]([a-zA-Z0-9_-]{25,})/);
                 if (match && match[1]) {
-                    // Using direct link structure that bypasses the 400 bad request in many environments
                     return `https://drive.google.com/uc?export=download&id=${match[1]}`;
                 }
                 return url;
