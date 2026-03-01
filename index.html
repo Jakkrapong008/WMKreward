@@ -226,63 +226,131 @@
                     )}
 
                     <footer className="bg-gray-100 py-6 text-center text-gray-500 text-sm border-t mt-12">
-                        &copy; 2024 โรงเรียนวัดแม่กะ - ระบบเทคโนโลยีสารสนเทศเพื่อการศึกษา
+                        จัดทำโดย ฝ่ายบริหารงานบุคคล
                     </footer>
                 </div>
             );
         };
 
         const Dashboard = ({ records }) => {
-            const [yearFilter, setYearFilter] = useState('2568');
+            const [filters, setFilters] = useState({ 
+                year: '2568', category: '', status: '', level: '', startDate: '', endDate: '' 
+            });
             const pieCanvasRef = useRef(null);
             const barCanvasRef = useRef(null);
             const doughnutCanvasRef = useRef(null);
+            const formatCanvasRef = useRef(null);
             const chartInstances = useRef({});
 
-            const filtered = useMemo(() => records.filter(r => String(r.year) === yearFilter), [records, yearFilter]);
+            const filtered = useMemo(() => {
+                return records.filter(r => {
+                    const matchesYear = !filters.year || String(r.year) === filters.year;
+                    const matchesCat = !filters.category || String(r.category) === filters.category;
+                    const matchesStatus = !filters.status || String(r.status) === filters.status;
+                    const matchesLevel = !filters.level || String(r.level) === filters.level;
+                    
+                    let matchesDate = true;
+                    if (filters.startDate && filters.endDate) {
+                        const start = new Date(filters.startDate);
+                        const end = new Date(filters.endDate);
+                        const recordDate = new Date(r.startDate);
+                        matchesDate = recordDate >= start && recordDate <= end;
+                    } else if (filters.startDate) {
+                        const start = new Date(filters.startDate);
+                        const recordDate = new Date(r.startDate);
+                        matchesDate = recordDate >= start;
+                    } else if (filters.endDate) {
+                        const end = new Date(filters.endDate);
+                        const recordDate = new Date(r.startDate);
+                        matchesDate = recordDate <= end;
+                    }
+                    return matchesYear && matchesCat && matchesStatus && matchesLevel && matchesDate;
+                });
+            }, [records, filters]);
             
             const stats = useMemo(() => {
                 const total = filtered.length;
                 const teacherCount = filtered.filter(r => ['ครู', 'ผู้บริหาร', 'เจ้าหน้าที่'].includes(r.status)).length;
                 const studentCount = filtered.filter(r => r.status === 'นักเรียน').length;
+                
                 const cats = {};
                 filtered.forEach(r => cats[r.category] = (cats[r.category] || 0) + 1);
+                
                 const lvls = {};
                 filtered.forEach(r => lvls[r.level] = (lvls[r.level] || 0) + 1);
-                return { total, teacherCount, studentCount, cats, lvls };
+
+                const statuses = {};
+                filtered.forEach(r => statuses[r.status] = (statuses[r.status] || 0) + 1);
+
+                const formats = { 'on-site': 0, 'online': 0 };
+                filtered.forEach(r => {
+                    const f = (r.format || 'on-site').toLowerCase();
+                    formats[f] = (formats[f] || 0) + 1;
+                });
+
+                return { total, teacherCount, studentCount, cats, lvls, statuses, formats };
             }, [filtered]);
 
             useEffect(() => {
                 const renderCharts = () => {
                     Object.values(chartInstances.current).forEach(chart => chart.destroy());
-                    if (pieCanvasRef.current && Object.keys(stats.cats).length > 0) {
+                    
+                    // 1. กราฟประเภทกิจกรรม (Pie)
+                    if (pieCanvasRef.current) {
                         chartInstances.current.pie = new Chart(pieCanvasRef.current, {
                             type: 'pie',
                             data: {
                                 labels: Object.keys(stats.cats),
                                 datasets: [{ data: Object.values(stats.cats), backgroundColor: ['#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#6366f1'] }]
                             },
-                            options: { plugins: { legend: { position: 'bottom', labels: { font: { family: 'Sarabun' } } } } }
+                            options: { maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { font: { family: 'Sarabun', size: 10 } } } } }
                         });
                     }
+
+                    // 2. กราฟสถานะ (Bar)
                     if (barCanvasRef.current) {
                         chartInstances.current.bar = new Chart(barCanvasRef.current, {
                             type: 'bar',
                             data: {
-                                labels: ['ครู/บุคลากร', 'นักเรียน'],
-                                datasets: [{ label: 'จำนวนผลงาน', data: [stats.teacherCount, stats.studentCount], backgroundColor: ['#e63946', '#ffb703'] }]
+                                labels: Object.keys(stats.statuses),
+                                datasets: [{ 
+                                    label: 'จำนวนผลงาน', 
+                                    data: Object.values(stats.statuses), 
+                                    backgroundColor: ['#e63946', '#ffb703', '#3b82f6', '#10b981'] 
+                                }]
                             },
-                            options: { scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }, plugins: { legend: { display: false } } }
+                            options: { 
+                                maintainAspectRatio: false,
+                                scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }, 
+                                plugins: { legend: { display: false } } 
+                            }
                         });
                     }
-                    if (doughnutCanvasRef.current && Object.keys(stats.lvls).length > 0) {
+
+                    // 3. กราฟระดับงาน (Doughnut)
+                    if (doughnutCanvasRef.current) {
                         chartInstances.current.doughnut = new Chart(doughnutCanvasRef.current, {
                             type: 'doughnut',
                             data: {
                                 labels: Object.keys(stats.lvls),
                                 datasets: [{ data: Object.values(stats.lvls), backgroundColor: ['#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#6366f1', '#475569'] }]
                             },
-                            options: { cutout: '60%', plugins: { legend: { position: 'bottom' } } }
+                            options: { cutout: '60%', maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { font: { family: 'Sarabun', size: 10 } } } } }
+                        });
+                    }
+
+                    // 4. กราฟรูปแบบกิจกรรม (Doughnut)
+                    if (formatCanvasRef.current) {
+                        chartInstances.current.format = new Chart(formatCanvasRef.current, {
+                            type: 'doughnut',
+                            data: {
+                                labels: ['On-site', 'Online'],
+                                datasets: [{ 
+                                    data: [stats.formats['on-site'], stats.formats['online']], 
+                                    backgroundColor: ['#e63946', '#3b82f6'] 
+                                }]
+                            },
+                            options: { cutout: '60%', maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { font: { family: 'Sarabun', size: 10 } } } } }
                         });
                     }
                 };
@@ -291,59 +359,111 @@
             }, [stats]);
 
             return (
-                <div className="space-y-8 animate-in fade-in duration-500">
+                <div className="space-y-6 animate-in fade-in duration-500">
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                         <h2 className="text-2xl md:text-3xl font-bold flex items-center gap-2 text-wmk-red">
                             <Icon name="bar-chart-3" className="w-8 h-8" />
                             สรุปข้อมูลภาพรวม
                         </h2>
-                        <select value={yearFilter} onChange={(e) => setYearFilter(e.target.value)} className="border-2 border-wmk-red rounded-lg px-4 py-2 font-bold outline-none cursor-pointer text-sm">
-                            <option value="2568">ปีการศึกษา 2568</option>
-                            <option value="2569">ปีการศึกษา 2569</option>
-                        </select>
                     </div>
 
+                    {/* Dashboard Filters */}
+                    <div className="card p-5 border-t-4 border-wmk-red bg-red-50/30">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-3">
+                            <div className="flex flex-col gap-1">
+                                <label className="text-[10px] font-bold text-gray-400 px-1">ปีการศึกษา</label>
+                                <select className="border rounded-lg p-2 text-xs bg-white" value={filters.year} onChange={e => setFilters({...filters, year: e.target.value})}>
+                                    <option value="">ทุกปี</option>
+                                    <option value="2568">2568</option>
+                                    <option value="2569">2569</option>
+                                </select>
+                            </div>
+                            <div className="flex flex-col gap-1">
+                                <label className="text-[10px] font-bold text-gray-400 px-1">ประเภท</label>
+                                <select className="border rounded-lg p-2 text-xs bg-white" value={filters.category} onChange={e => setFilters({...filters, category: e.target.value})}>
+                                    <option value="">ทุกประเภท</option>
+                                    {['การอบรม','การประชุม','การเป็นวิทยากร','รางวัลครู','รางวัลนักเรียน','คณะทำงาน','คณะกรรมการ'].map(c => <option key={c} value={c}>{c}</option>)}
+                                </select>
+                            </div>
+                            <div className="flex flex-col gap-1">
+                                <label className="text-[10px] font-bold text-gray-400 px-1">สถานะ</label>
+                                <select className="border rounded-lg p-2 text-xs bg-white" value={filters.status} onChange={e => setFilters({...filters, status: e.target.value})}>
+                                    <option value="">ทุกสถานะ</option>
+                                    {['นักเรียน','ครู','ผู้บริหาร','เจ้าหน้าที่'].map(s => <option key={s} value={s}>{s}</option>)}
+                                </select>
+                            </div>
+                            <div className="flex flex-col gap-1">
+                                <label className="text-[10px] font-bold text-gray-400 px-1">ระดับงาน</label>
+                                <select className="border rounded-lg p-2 text-xs bg-white" value={filters.level} onChange={e => setFilters({...filters, level: e.target.value})}>
+                                    <option value="">ทุกระดับ</option>
+                                    {['โรงเรียน','ตำบล','อำเภอ','เครือข่ายพัฒนาคุณภาพการศึกษา','เขตพื้นที่การศึกษา','จังหวัด','ภาค','เขตตรวจราชการ','ประเทศ','นานาชาติ'].map(l => <option key={l} value={l}>{l}</option>)}
+                                </select>
+                            </div>
+                            <div className="flex flex-col gap-1">
+                                <label className="text-[10px] font-bold text-gray-400 px-1">ตั้งแต่วันที่</label>
+                                <input type="date" className="border rounded-lg p-2 text-xs bg-white" value={filters.startDate} onChange={e => setFilters({...filters, startDate: e.target.value})} />
+                            </div>
+                            <div className="flex flex-col gap-1">
+                                <label className="text-[10px] font-bold text-gray-400 px-1">ถึงวันที่</label>
+                                <input type="date" className="border rounded-lg p-2 text-xs bg-white" value={filters.endDate} onChange={e => setFilters({...filters, endDate: e.target.value})} />
+                            </div>
+                            <div className="flex items-end">
+                                <button onClick={() => setFilters({ year: '', category: '', status: '', level: '', startDate: '', endDate: '' })} className="w-full bg-white border border-red-200 text-wmk-red py-2 rounded-lg text-xs font-bold hover:bg-red-50 transition-colors">
+                                    ล้างตัวกรอง
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Stats Summary */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-center md:text-left">
                         <div className="card p-6 border-b-4 border-blue-500 flex items-center gap-4">
                             <div className="bg-blue-100 p-4 rounded-full text-blue-600 hidden sm:block"><Icon name="files" className="w-8 h-8" /></div>
                             <div className="flex-grow">
-                                <p className="text-gray-500 font-semibold text-sm">ผลงานทั้งหมด</p>
+                                <p className="text-gray-500 font-semibold text-sm">ผลงานตามเงื่อนไข</p>
                                 <p className="text-3xl font-bold">{stats.total}</p>
                             </div>
                         </div>
                         <div className="card p-6 border-b-4 border-wmk-red flex items-center gap-4">
                             <div className="bg-red-100 p-4 rounded-full text-wmk-red hidden sm:block"><Icon name="user-check" className="w-8 h-8" /></div>
                             <div className="flex-grow">
-                                <p className="text-gray-500 font-semibold text-sm">ผลงานครู/บุคลากร</p>
+                                <p className="text-gray-500 font-semibold text-sm">ผู้บริหาร/ครู</p>
                                 <p className="text-3xl font-bold">{stats.teacherCount}</p>
                             </div>
                         </div>
                         <div className="card p-6 border-b-4 border-wmk-yellow flex items-center gap-4">
                             <div className="bg-yellow-100 p-4 rounded-full text-yellow-600 hidden sm:block"><Icon name="users" className="w-8 h-8" /></div>
                             <div className="flex-grow">
-                                <p className="text-gray-500 font-semibold text-sm">ผลงานนักเรียน</p>
+                                <p className="text-gray-500 font-semibold text-sm">นักเรียน</p>
                                 <p className="text-3xl font-bold">{stats.studentCount}</p>
                             </div>
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    {/* Charts Grid */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                         <div className="card p-6">
-                            <h3 className="font-bold text-center mb-4 text-sm">สัดส่วนประเภทกิจกรรม</h3>
-                            <div className="h-64 flex items-center justify-center">
-                                {stats.total > 0 ? <canvas ref={pieCanvasRef}></canvas> : <p className="text-gray-400 italic text-sm">ไม่มีข้อมูล</p>}
+                            <h3 className="font-bold text-center mb-4 text-sm flex items-center justify-center gap-2"><Icon name="pie-chart" className="w-4 h-4" /> สัดส่วนประเภทกิจกรรม</h3>
+                            <div className="h-64">
+                                {stats.total > 0 ? <canvas ref={pieCanvasRef}></canvas> : <div className="h-full flex items-center justify-center text-gray-400 italic text-sm">ไม่มีข้อมูล</div>}
                             </div>
                         </div>
                         <div className="card p-6">
-                            <h3 className="font-bold text-center mb-4 text-sm">เปรียบเทียบครู/นักเรียน</h3>
-                            <div className="h-64 flex items-center justify-center">
-                                <canvas ref={barCanvasRef}></canvas>
+                            <h3 className="font-bold text-center mb-4 text-sm flex items-center justify-center gap-2"><Icon name="bar-chart-2" className="w-4 h-4" /> จำนวนผลงานแยกตามสถานะ</h3>
+                            <div className="h-64">
+                                {stats.total > 0 ? <canvas ref={barCanvasRef}></canvas> : <div className="h-full flex items-center justify-center text-gray-400 italic text-sm">ไม่มีข้อมูล</div>}
                             </div>
                         </div>
                         <div className="card p-6">
-                            <h3 className="font-bold text-center mb-4 text-sm">สัดส่วนงานระดับต่างๆ</h3>
-                            <div className="h-64 flex items-center justify-center">
-                                {stats.total > 0 ? <canvas ref={doughnutCanvasRef}></canvas> : <p className="text-gray-400 italic text-sm">ไม่มีข้อมูล</p>}
+                            <h3 className="font-bold text-center mb-4 text-sm flex items-center justify-center gap-2"><Icon name="award" className="w-4 h-4" /> สัดส่วนงานระดับต่างๆ</h3>
+                            <div className="h-64">
+                                {stats.total > 0 ? <canvas ref={doughnutCanvasRef}></canvas> : <div className="h-full flex items-center justify-center text-gray-400 italic text-sm">ไม่มีข้อมูล</div>}
+                            </div>
+                        </div>
+                        <div className="card p-6">
+                            <h3 className="font-bold text-center mb-4 text-sm flex items-center justify-center gap-2"><Icon name="laptop" className="w-4 h-4" /> รูปแบบกิจกรรม (On-site / Online)</h3>
+                            <div className="h-64">
+                                {stats.total > 0 ? <canvas ref={formatCanvasRef}></canvas> : <div className="h-full flex items-center justify-center text-gray-400 italic text-sm">ไม่มีข้อมูล</div>}
                             </div>
                         </div>
                     </div>
@@ -355,7 +475,7 @@
             const [mode, setMode] = useState('card');
             const [search, setSearch] = useState('');
             const [filters, setFilters] = useState({ 
-                year: '', 
+                year: '2568', 
                 category: '', 
                 status: '', 
                 level: '', 
@@ -364,7 +484,6 @@
             });
 
             const filtered = useMemo(() => {
-                // กรองข้อมูลตามเงื่อนไข
                 let result = records.filter(r => {
                     const matchesSearch = String(r.activityName || "").toLowerCase().includes(search.toLowerCase()) || String(r.names || "").toLowerCase().includes(search.toLowerCase());
                     const matchesYear = !filters.year || String(r.year) === filters.year;
@@ -372,7 +491,6 @@
                     const matchesStatus = !filters.status || String(r.status) === filters.status;
                     const matchesLevel = !filters.level || String(r.level) === filters.level;
                     
-                    // Date filtering
                     let matchesDate = true;
                     if (filters.startDate && filters.endDate) {
                         const start = new Date(filters.startDate);
@@ -380,11 +498,9 @@
                         const recordDate = new Date(r.startDate);
                         matchesDate = recordDate >= start && recordDate <= end;
                     }
-
                     return matchesSearch && matchesYear && matchesCat && matchesStatus && matchesLevel && matchesDate;
                 });
 
-                // เพิ่มส่วนการเรียงลำดับ: เรียงตาม startDate จากน้อยไปมาก
                 result.sort((a, b) => {
                     const dateA = a.startDate ? new Date(a.startDate).getTime() : 0;
                     const dateB = b.startDate ? new Date(b.startDate).getTime() : 0;
@@ -394,10 +510,12 @@
                 return result;
             }, [records, search, filters]);
 
-            // แก้ไขฟังก์ชัน Export Excel ให้ตรงกับ Google Sheets
+            const totalHours = useMemo(() => {
+                return filtered.reduce((sum, r) => sum + (parseFloat(r.hours) || 0), 0);
+            }, [filtered]);
+
             const exportExcel = () => {
                 const dataForExport = filtered.map(r => {
-                    // สร้างแถวข้อมูลที่จัดเรียงคอลัมน์ตามความต้องการ
                     const row = {
                         "ปีการศึกษา": r.year,
                         "ชื่อผู้รับผิดชอบ": r.names,
@@ -415,7 +533,6 @@
                         "รายละเอียด": r.details
                     };
 
-                    // กระจายไฟล์แนบจาก Array เป็นคอลัมน์ files1 ถึง files10
                     for (let i = 0; i < 10; i++) {
                         row[`files${i + 1}`] = (r.files && r.files[i]) ? r.files[i] : "";
                     }
@@ -430,8 +547,7 @@
             };
 
             return (
-                <div className="space-y-6">
-                    {/* Advanced Filters */}
+                <div className="space-y-6 pb-20">
                     <div className="card p-6 border-t-4 border-wmk-yellow">
                         <h3 className="font-bold mb-4 flex items-center gap-2"><Icon name="filter" /> ตัวกรองข้อมูล</h3>
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
@@ -548,6 +664,24 @@
                                     ))}
                                 </tbody>
                             </table>
+                        </div>
+                    )}
+
+                    {filters.category === 'การอบรม' && filtered.length > 0 && (
+                        <div className="mt-12 p-6 bg-wmk-red text-white rounded-xl shadow-xl flex items-center justify-between animate-in fade-in slide-in-from-bottom-4 duration-500">
+                            <div className="flex items-center gap-4">
+                                <div className="bg-white/20 p-3 rounded-full">
+                                    <Icon name="clock" className="w-8 h-8" />
+                                </div>
+                                <div>
+                                    <h4 className="text-sm font-bold opacity-80 uppercase tracking-wider">สรุปผลการสืบค้น</h4>
+                                    <p className="text-2xl font-bold">รวมจำนวนชั่วโมงการอบรม</p>
+                                </div>
+                            </div>
+                            <div className="text-right">
+                                <span className="text-5xl font-black">{totalHours}</span>
+                                <span className="ml-2 text-lg font-bold">ชั่วโมง</span>
+                            </div>
                         </div>
                     )}
                 </div>
