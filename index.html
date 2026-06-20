@@ -602,7 +602,7 @@
             const [mode, setMode] = useState('card');
             const [search, setSearch] = useState('');
             const [filters, setFilters] = useState({ 
-                year: '2568', category: '', status: '', level: '', startDate: '', endDate: '' 
+                year: '', category: '', status: '', level: '', startDate: '', endDate: '' 
             });
 
             const filtered = useMemo(() => {
@@ -919,7 +919,7 @@
             const isEditMode = !!initialData;
             
             const [formData, setFormData] = useState({
-                year: '2568', names: '', status: 'นักเรียน', category: 'การอบรม', activityName: '',
+                year: '2569', names: '', status: 'นักเรียน', category: 'การอบรม', activityName: '',
                 result: 'เข้าร่วม', resultCustom: '', details: '', hours: '0', level: 'โรงเรียน',
                 startDate: '', endDate: '', format: 'on-site', agency: '', location: ''
             });
